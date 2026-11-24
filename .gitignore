@@ -1,0 +1,14 @@
+# 키·비밀 값 — 절대 올리지 않기
+.env
+.env.*
+tools/api_key.txt
+*api_key*
+*.key
+
+# 실행 중 생기는 파일
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+Thumbs.db
+supabase/.temp/
