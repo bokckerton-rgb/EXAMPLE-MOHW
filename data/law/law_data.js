@@ -1,37 +1,63 @@
-// 법령 연혁 자료 — 화면(web/index.html)이 이 파일을 읽어요.
-// ⚠ 지금 값은 형식을 보여주는 "예시"예요. 법령 MCP 결과로 통째로 바꿔 주세요.
-// 칸 이름은 팀 데이터 공통규격의 events 표와 맞췄어요.
+// 법령 연혁 자료 — 클레이 강의실 "규제개혁법무담당관" 칠판 규격
+// 화면(web/index.html)과 클레이 강의실(Main)이 그대로 읽을 수 있는 모양이에요.
+//
+// 규격 (정책 1개당)
+//   lawRow    : 인수인계서 "근거 법령" 한 줄
+//   laws      : 연혁 타임라인 칠판  { type:'timeline', title, chip, items:[{date, sub, title, desc}], note }
+//               date = 공포일, sub = 법률 번호, title = 한 줄 제목, desc = 설명
+//   lawStruct : 법령 체계 카드 칠판 { type:'cards', title, chip, items:[{title, chip, chipBg, desc}], note }
+//   lines     : 법무담당관 대사      [{t: 말, b: 'laws'|'lawStruct', hl:[강조할 항목 번호]}]
+//   check     : 확인 상태 — verified(원문 대조) / auto_extracted(자동 추출) / sample(예시)
+//
+// 다른 정책을 추가할 때는 "아동수당" 덩어리를 복사해 이름과 내용만 바꾸면 돼요.
 window.LAW_DATA = {
-  observed_at: "2026-11-25",       // 자료를 받은 날
-  source: "예시 (법령 MCP 결과로 교체 필요)",
-  is_sample: true,
+  observed_at: "2026-11-25",
+  source: "국가법령정보센터 아동수당법 연혁 · 국민참여입법센터 의안정보",
+  is_sample: false,
   policies: {
     "아동수당": {
-      laws: ["아동수당법", "아동수당법 시행령"],
-      events: [
-        {
-          law_name: "아동수당법",
-          event_type: "제정",          // 제정 / 일부개정 / 전부개정 / 타법개정
-          promulgated_on: "2018-03-27", // 공포일
-          effective_on: "2018-09-01",   // 시행일
-          summary: "예시 — 아동수당 지급 근거 마련",
-          source_url: "https://www.law.go.kr",
-          validation_status: "sample"
-        },
-        {
-          law_name: "아동수당법",
-          event_type: "일부개정",
-          promulgated_on: "",
-          effective_on: "",
-          summary: "예시 — 지급 대상 연령 확대 (날짜는 MCP 결과로 채우기)",
-          source_url: "https://www.law.go.kr",
-          validation_status: "sample"
-        }
+      lawRow: "아동수당법(법률 제21489호, 2026.3.20) · 같은 법 시행령(2026.3.27) · 고시 「아동수당 추가지급 대상지역」",
+      laws: {
+        type: "timeline",
+        title: "아동수당법이 걸어온 길",
+        chip: "법률 7단계",
+        items: [
+          { date: "2017.12",    sub: "예산 합의",  title: "선별 지급으로 출발 결정", desc: "2018년 예산 여야 합의로 소득 하위 90%, 0~5세, 월 10만 원", check: "auto_extracted" },
+          { date: "2018.3.27",  sub: "제15539호",  title: "제정",                     desc: "2.28 본회의 통과 · 상위 10% 제외 · 2018년 9월 첫 지급", check: "verified" },
+          { date: "2019.1.15",  sub: "제16249호",  title: "보편 지급 전환",           desc: "2018.12.27 본회의 · 소득기준 삭제 · 2019년 9월 만 7세 미만 확대", check: "verified" },
+          { date: "2019.12.3",  sub: "제16737호",  title: "일부개정",                 desc: "세부 내용은 국가법령정보센터 원문 확인", check: "auto_extracted" },
+          { date: "2021.12.14", sub: "제18579호",  title: "만 8세 미만 · 영아 추가",  desc: "연령 상향 · 2세 미만 추가 지급 근거 신설", check: "verified" },
+          { date: "2023.6.13",  sub: "제19455호",  title: "부모급여 근거",            desc: "2세 미만 월 50만 원 이상 추가 지급", check: "verified" },
+          { date: "2026.3.20",  sub: "제21489호",  title: "13세 미만 단계 확대",      desc: "8세 미만 → 13세 미만(2026~2030 단계 상향) · 비수도권·인구감소지역 월 2만 원 범위 추가 · 1.7 복지위 대안 → 법사위 → 3.1 본회의 → 3.20 공포·시행", check: "verified" }
+        ],
+        note: "출처: 국가법령정보센터 아동수당법 연혁·제정개정이유, 국민참여입법센터 의안 정보"
+      },
+      lawStruct: {
+        type: "cards",
+        title: "법령 체계와 다음 숙제",
+        chip: "실무에서 자주 펴는 조문",
+        items: [
+          { title: "법 제4조 (대상·금액)",           chip: "본체",     chipBg: "#E8E3FA", desc: "①13세 미만 월 10만 원 ⑤2세 미만 추가 지급(부모급여분) ⑥비수도권·인구감소지역 월 2만 원 범위 추가 ⑦인구감소지역 상품권 지급 시 추가. 연도별 연령 단계는 부칙 확인." },
+          { title: "시행령 제2조 (2026.3.27 개정)",  chip: "금액",     chipBg: "#FFF0C2", desc: "추가 지급 지역·금액을 정함. 1세 미만·1~2세 추가 지급액도 시행령에서 확인." },
+          { title: "고시 「아동수당 추가지급 대상지역」", chip: "지역", chipBg: "#D8F1EA", desc: "비수도권·우대·특별지역 시·군·구 지정. 인구감소지역 지정이 바뀌면 고시도 함께 개정." },
+          { title: "계류 중인 개정안",               chip: "국회",     chipBg: "#FFE7D6", desc: "이의신청 결정 통지·행정심판 안내 의무를 법률에 직접 두자는 개정안(2026.6 발의) 등. 소관위 심사 상황 확인." }
+        ],
+        note: "출처: 아동수당법·시행령 조문, 국민참여입법센터"
+      },
+      lines: [
+        { t: "규제개혁법무담당관이에요. 아동수당법이 어떻게 만들어지고 바뀌어 왔는지 순서대로 볼게요.", b: "laws" },
+        { t: "시작은 2017년 말 예산 합의였어요. 소득 하위 90%만 주는 선별 지급으로 2018년 3월 법이 만들어졌죠.", b: "laws", hl: [0, 1] },
+        { t: "선별에 드는 행정 비용 논란 끝에 2019년부터 모든 아동에게 주게 됐어요. 그해 9월엔 만 7세 미만으로 넓어졌고요.", b: "laws", hl: [2] },
+        { t: "2021년엔 만 8세 미만 확대와 영아 추가 지급 근거가, 2023년엔 부모급여 근거가 들어왔어요. 부모급여 근거가 이 법 안에 있다는 것, 꼭 기억하세요.", b: "laws", hl: [4, 5] },
+        { t: "최근 개정은 2026년 3월 20일이에요. 13세 미만까지 2030년까지 단계적으로 넓히고, 비수도권·인구감소지역은 더 주도록 했어요.", b: "laws", hl: [6] },
+        { t: "실제 금액과 지역은 시행령과 고시가 정해요. 국회에 걸린 개정안도 꼭 챙겨 보세요.", b: "lawStruct" }
       ]
     },
     "재난적의료비": {
-      laws: ["재난적의료비 지원에 관한 법률"],
-      events: []
+      lawRow: "재난적의료비 지원에 관한 법률 — 2단계에서 채울 예정",
+      laws: { type: "timeline", title: "재난적의료비 제도가 걸어온 길", chip: "준비 중", items: [], note: "" },
+      lawStruct: { type: "cards", title: "법령 체계", chip: "준비 중", items: [], note: "" },
+      lines: []
     }
   }
 };
