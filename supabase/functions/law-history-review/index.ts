@@ -175,6 +175,7 @@ const SYSTEM_PROMPT = [
   '- headline 은 무엇이 바뀌었는지 한국어 20자 이내 짧은 제목(예: "13세 미만으로 확대", "첫만남이용권 신설").',
   '- changes 는 핵심 변화 최대 3개. 각 항목 {"item": 무엇(예: 지원 대상), "before": 개정 전 값, "after": 개정 후 값}.',
   '  before·after 는 입력의 개정전·개정후 문구나 관련부칙에 실제로 있는 표현만 짧게(30자 이내) 옮기세요. 새로 생긴 것이면 before 는 "".',
+  '- 설명 문장 없이 JSON 만 짧게 쓰세요. 중요하지 않은 후보는 빼도 됩니다(빈 배열 가능).',
   '출력은 JSON 하나만: {"recommendations":[{"candidate_id":"…","importance":5,"reason":"…","areas":["지원 대상"],"headline":"…","changes":[{"item":"지원 대상","before":"8세 미만","after":"13세 미만"}]}]}',
 ].join('\n');
 
@@ -193,7 +194,7 @@ function aiInput(cands: Candidate[]) {
   }));
 }
 
-async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: string; finish: string }> {
+async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: string; finish: string; outTokens: number; thinkTokens: number }> {
   const rawKey = env('OPENROUTER_API_KEY');
   const key = cleanKey(rawKey);
   if (!key) throw new UserError(500, 'NO_OPENROUTER_KEY', '서버에 OpenRouter 키(OPENROUTER_API_KEY)가 없어요. Edge Functions > Secrets 에 등록해 주세요.');
@@ -203,11 +204,12 @@ async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: 
   try {
     res = await fetch(OPENROUTER_URL, {
       method: 'POST',
-      signal: AbortSignal.timeout(90000),
+      signal: AbortSignal.timeout(60000),
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'MOHW handoff law history' },
       body: JSON.stringify({
-        model, temperature: 0, max_tokens: 6000,
+        model, temperature: 0, max_tokens: 4000,
         response_format: { type: 'json_object' },
+        reasoning: { effort: 'low' }, // 생각 단계에 출력 한도를 다 쓰지 않게 (지원 안 하는 모델은 무시)
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: JSON.stringify({ 후보: aiInput(cands) }) },
@@ -216,7 +218,7 @@ async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: 
     });
   } catch (e) {
     throw new UserError(504, 'OPENROUTER_UNREACHABLE', (e as Error)?.name === 'TimeoutError'
-      ? 'OpenRouter 응답이 90초 안에 오지 않았어요. 잠시 뒤 다시 검토해 주세요.' : 'OpenRouter에 연결하지 못했어요.');
+      ? 'OpenRouter 응답이 60초 안에 오지 않았어요. 잠시 뒤 다시 검토해 주세요.' : 'OpenRouter에 연결하지 못했어요.');
   }
   const body = await res.text();
   if (!res.ok) {
@@ -230,7 +232,12 @@ async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: 
   }
   let data: any;
   try { data = JSON.parse(body); } catch { throw new UserError(502, 'OPENROUTER_BAD_JSON', 'OpenRouter 응답을 읽지 못했어요.'); }
-  return { model: String(data?.model || model), raw: String(data?.choices?.[0]?.message?.content ?? ''), finish: String(data?.choices?.[0]?.finish_reason ?? '') };
+  return {
+    model: String(data?.model || model), raw: String(data?.choices?.[0]?.message?.content ?? ''),
+    finish: String(data?.choices?.[0]?.finish_reason ?? ''),
+    outTokens: Number(data?.usage?.completion_tokens) || 0,
+    thinkTokens: Number(data?.usage?.completion_tokens_details?.reasoning_tokens) || 0,
+  };
 }
 
 /** 화면 B·HWPX C 용 칸 정리: 분야는 정해진 다섯 가지만, 제목·전후 문구는 길이 제한 */
@@ -323,6 +330,52 @@ async function runSync(taskId: string) {
   }
 }
 
+// ---------------- 후보를 3건씩 나눠 AI에 묻기 ----------------
+// 무료 모델은 한 번에 쓸 수 있는 답 길이가 짧아, 9건을 한꺼번에 물으면 답이 잘림 → 3건씩 나눠 동시에 물음
+const BATCH_SIZE = 3;
+async function reviewInBatches(cands: Candidate[], allIds: Set<string>) {
+  const batches: Candidate[][] = [];
+  for (let i = 0; i < cands.length; i += BATCH_SIZE) batches.push(cands.slice(i, i + BATCH_SIZE));
+  const results = await Promise.all(batches.map(async (batch) => {
+    const allowed = new Set(batch.map((c) => c.id));
+    const tried: string[] = [];
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const ai = await askOpenRouter(batch);
+        tried.push(`${ai.model}${ai.finish === 'length' ? `(잘림: 출력 ${ai.outTokens}토큰 중 생각 ${ai.thinkTokens}, 답 ${ai.raw.length}자)` : ''}`);
+        const v = validateRecommendations(ai.raw, allIds);
+        return { ok: true as const, model: ai.model, ...v, tried };
+      } catch (e) {
+        lastErr = e;
+        // 키 오류·크레딧·한도 초과는 다시 불러도 같으므로 바로 멈춤
+        if (e instanceof UserError && e.code !== 'AI_BAD_FORMAT' && e.code !== 'OPENROUTER_UNREACHABLE' && !/^OPENROUTER_HTTP_5/.test(e.code)) throw e;
+      }
+    }
+    return { ok: false as const, ids: [...allowed], tried, err: lastErr };
+  }));
+  const okOnes = results.filter((r) => r.ok) as any[];
+  const failed = results.filter((r) => !r.ok) as any[];
+  if (!okOnes.length) {
+    const first = failed[0]?.err;
+    if (first instanceof UserError && first.code !== 'AI_BAD_FORMAT') throw first;
+    const tried = failed.flatMap((f) => f.tried);
+    throw new UserError(502, 'AI_BAD_FORMAT', `AI 답이 약속한 JSON 형식이 아니에요(${tried.length}번 시도: ${cut(tried.join(', '), 300)}). 잠시 뒤 다시 검토하거나, Secrets 의 OPENROUTER_MODEL 을 다른 모델로 바꿔 주세요.`);
+  }
+  const dropped = okOnes.flatMap((r) => r.dropped);
+  const seen = new Set<string>();
+  let kept: any[] = [];
+  for (const k of okOnes.flatMap((r) => r.kept)) {
+    if (seen.has(k.candidate_id)) { dropped.push({ candidate_id: k.candidate_id, why: '중복 ID' }); continue; }
+    seen.add(k.candidate_id); kept.push(k);
+  }
+  for (const f of failed) for (const id of f.ids) dropped.push({ candidate_id: id, why: 'AI 답 형식 오류로 이 후보는 검토 못 함' });
+  kept.sort((a: any, b: any) => b.importance - a.importance);
+  for (const x of kept.splice(MAX_ITEMS)) dropped.push({ candidate_id: x.candidate_id, why: '10건 초과' });
+  const models = [...new Set(okOnes.map((r) => r.model))].join(', ');
+  return { kept, dropped, model: models };
+}
+
 // ---------------- 요청 처리 ----------------
 export async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -360,27 +413,9 @@ export async function handle(req: Request): Promise<Response> {
       const allowed = new Set(cands.map((c) => c.id));
       let model = env('OPENROUTER_MODEL').trim() || 'openrouter/auto';
       try {
-        // 무료 라우터(openrouter/free)는 부를 때마다 다른 모델을 고르므로, 형식이 틀리면 최대 3번까지 다시 부름
-        let kept: any[] = [], dropped: any[] = [];
-        const tried: string[] = [];
-        const t0 = Date.now(); // Edge Function 시간 제한 때문에 50초가 지나면 더 다시 부르지 않음
-        for (let attempt = 1; ; attempt++) {
-          const ai = await askOpenRouter(cands);
-          model = ai.model;
-          tried.push(`${ai.model}${ai.finish === 'length' ? '(답이 길어 잘림)' : ''}`);
-          try {
-            ({ kept, dropped } = validateRecommendations(ai.raw, allowed));
-            if (kept.length) break;
-            if (attempt >= 3 || Date.now() - t0 > 50000) break;
-          } catch (err) {
-            if (!(err instanceof UserError) || err.code !== 'AI_BAD_FORMAT' || attempt >= 3 || Date.now() - t0 > 50000) {
-              if (err instanceof UserError && err.code === 'AI_BAD_FORMAT') {
-                throw new UserError(502, 'AI_BAD_FORMAT', `AI 답이 약속한 JSON 형식이 아니에요(${tried.length}번 시도: ${tried.join(', ')}). 잠시 뒤 다시 검토하거나, Secrets 의 OPENROUTER_MODEL 을 성공했던 모델 이름으로 바꿔 주세요.`);
-              }
-              throw err;
-            }
-          }
-        }
+        const r = await reviewInBatches(cands, allowed);
+        const kept = r.kept, dropped = r.dropped;
+        model = r.model;
         const saved = await rest('law_revision_reviews', {
           method: 'POST', headers: { Prefer: 'return=representation' },
           body: JSON.stringify({ task_id: taskId, status: 'succeeded', model, candidate_ids: [...allowed], recommendations: kept, dropped, requested_by: requestedBy }),
