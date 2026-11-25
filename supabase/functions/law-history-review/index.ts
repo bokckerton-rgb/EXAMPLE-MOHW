@@ -193,7 +193,7 @@ function aiInput(cands: Candidate[]) {
   }));
 }
 
-async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: string }> {
+async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: string; finish: string }> {
   const rawKey = env('OPENROUTER_API_KEY');
   const key = cleanKey(rawKey);
   if (!key) throw new UserError(500, 'NO_OPENROUTER_KEY', '서버에 OpenRouter 키(OPENROUTER_API_KEY)가 없어요. Edge Functions > Secrets 에 등록해 주세요.');
@@ -206,7 +206,7 @@ async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: 
       signal: AbortSignal.timeout(90000),
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'MOHW handoff law history' },
       body: JSON.stringify({
-        model, temperature: 0, max_tokens: 4000,
+        model, temperature: 0, max_tokens: 6000,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
@@ -230,7 +230,7 @@ async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: 
   }
   let data: any;
   try { data = JSON.parse(body); } catch { throw new UserError(502, 'OPENROUTER_BAD_JSON', 'OpenRouter 응답을 읽지 못했어요.'); }
-  return { model: String(data?.model || model), raw: String(data?.choices?.[0]?.message?.content ?? '') };
+  return { model: String(data?.model || model), raw: String(data?.choices?.[0]?.message?.content ?? ''), finish: String(data?.choices?.[0]?.finish_reason ?? '') };
 }
 
 /** 화면 B·HWPX C 용 칸 정리: 분야는 정해진 다섯 가지만, 제목·전후 문구는 길이 제한 */
@@ -246,11 +246,37 @@ export function displayFields(r: any) {
   return { areas: areas.length ? areas : ['기타'], headline: oneLine(r?.headline, 40), changes };
 }
 
+/** 작은 모델이 답을 중간에 끊거나 앞뒤에 글을 붙여도, 온전히 닫힌 추천 항목만 골라냄 */
+export function salvageRecommendations(raw: string): any[] {
+  const out: any[] = [];
+  const re = /\{\s*"candidate_id"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) {
+    let depth = 0, inStr = false, esc = false, end = -1;
+    for (let i = m.index; i < raw.length; i++) {
+      const ch = raw[i];
+      if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') inStr = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end < 0) break; // 끝이 잘린 항목은 버림
+    try { out.push(JSON.parse(raw.slice(m.index, end + 1))); } catch { /* 깨진 항목은 버림 */ }
+    re.lastIndex = end + 1;
+  }
+  return out;
+}
+
 /** AI 답 검증: 실제 후보에 없는 ID·중복 ID·형식 오류를 거르고 최대 10건 */
 export function validateRecommendations(raw: string, allowedIds: Set<string>) {
   let parsed: any = null;
-  const s = raw.indexOf('{'), e = raw.lastIndexOf('}');
-  try { parsed = JSON.parse(s >= 0 && e > s ? raw.slice(s, e + 1) : raw); } catch { /* 아래에서 처리 */ }
+  const clean = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```(?:json)?/gi, '');
+  const s = clean.indexOf('{'), e = clean.lastIndexOf('}');
+  try { parsed = JSON.parse(s >= 0 && e > s ? clean.slice(s, e + 1) : clean); } catch { /* 아래에서 처리 */ }
+  if (!parsed || !Array.isArray(parsed.recommendations)) {
+    const items = salvageRecommendations(clean);
+    if (items.length) parsed = { recommendations: items };
+  }
   if (!parsed || !Array.isArray(parsed.recommendations)) {
     throw new UserError(502, 'AI_BAD_FORMAT', 'AI 답이 약속한 JSON 형식이 아니에요. 다시 검토해 주세요.');
   }
@@ -334,9 +360,27 @@ export async function handle(req: Request): Promise<Response> {
       const allowed = new Set(cands.map((c) => c.id));
       let model = env('OPENROUTER_MODEL').trim() || 'openrouter/auto';
       try {
-        const ai = await askOpenRouter(cands);
-        model = ai.model;
-        const { kept, dropped } = validateRecommendations(ai.raw, allowed);
+        // 무료 라우터(openrouter/free)는 부를 때마다 다른 모델을 고르므로, 형식이 틀리면 최대 3번까지 다시 부름
+        let kept: any[] = [], dropped: any[] = [];
+        const tried: string[] = [];
+        const t0 = Date.now(); // Edge Function 시간 제한 때문에 50초가 지나면 더 다시 부르지 않음
+        for (let attempt = 1; ; attempt++) {
+          const ai = await askOpenRouter(cands);
+          model = ai.model;
+          tried.push(`${ai.model}${ai.finish === 'length' ? '(답이 길어 잘림)' : ''}`);
+          try {
+            ({ kept, dropped } = validateRecommendations(ai.raw, allowed));
+            if (kept.length) break;
+            if (attempt >= 3 || Date.now() - t0 > 50000) break;
+          } catch (err) {
+            if (!(err instanceof UserError) || err.code !== 'AI_BAD_FORMAT' || attempt >= 3 || Date.now() - t0 > 50000) {
+              if (err instanceof UserError && err.code === 'AI_BAD_FORMAT') {
+                throw new UserError(502, 'AI_BAD_FORMAT', `AI 답이 약속한 JSON 형식이 아니에요(${tried.length}번 시도: ${tried.join(', ')}). 잠시 뒤 다시 검토하거나, Secrets 의 OPENROUTER_MODEL 을 성공했던 모델 이름으로 바꿔 주세요.`);
+              }
+              throw err;
+            }
+          }
+        }
         const saved = await rest('law_revision_reviews', {
           method: 'POST', headers: { Prefer: 'return=representation' },
           body: JSON.stringify({ task_id: taskId, status: 'succeeded', model, candidate_ids: [...allowed], recommendations: kept, dropped, requested_by: requestedBy }),
