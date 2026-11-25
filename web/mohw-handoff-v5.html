@@ -549,6 +549,26 @@ body { margin: 0; }
 /* ---- 주요 개정 연혁 (확정본) · 검토 ---- */
 .hist-meta { margin: 0; font-size: 13px; line-height: 1.5; color: #686a6d; }
 .hist-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.hist-years { display: flex; flex-direction: column; gap: 18px; }
+.hist-year { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 14px; align-items: start; }
+.hist-year-h { margin: 0; padding-top: 12px; font: 700 20px/1.3 var(--handoff-font); color: var(--ink); letter-spacing: -.02em; }
+.hist-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.hist-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.hist-tag { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 9px; background: #eef0f2; color: #45474a; }
+.hist-tag.is-target { background: #e8f0ff; color: #0b3a9e; }
+.hist-tag.is-amount { background: #e6f6ee; color: #075936; }
+.hist-tag.is-process { background: #f3ecff; color: #5427a1; }
+.hist-tag.is-transition { background: #fff3e0; color: #8d510e; }
+.hist-changes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.hist-ch { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 15px; line-height: 1.55; color: var(--text); overflow-wrap: anywhere; }
+.hist-ch.is-note { font-size: 14px; color: #57595b; }
+.hist-ch.is-note .hist-ch-after { font-weight: 400; color: #57595b; }
+.hist-ch-item { font-size: 13px; font-weight: 600; color: #686a6d; }
+.hist-ch-item::after { content: ':'; }
+.hist-ch-before { color: #8a8c90; text-decoration: line-through; text-decoration-color: #c4c6ca; }
+.hist-ch-arrow { color: #8a8c90; }
+.hist-ch-after { font-weight: 600; color: var(--ink); }
+.hist-ch-when { font-size: 13px; color: #686a6d; }
 .hist-item { display: grid; grid-template-columns: 136px minmax(0, 1fr); gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .hist-date { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .hist-date strong { font: 700 16px/1.4 var(--handoff-font); color: var(--ink); }
@@ -585,7 +605,7 @@ body { margin: 0; }
 .rv-cols span, .rv-add span { display: block; margin-bottom: 4px; font-size: 12px; color: #686a6d; }
 .rv-cols p, .rv-add p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; color: var(--text); }
 .rv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-@media (max-width: 720px) { .hist-item { grid-template-columns: minmax(0, 1fr); gap: 6px; } .hist-date { flex-direction: row; flex-wrap: wrap; align-items: center; } .rv-cols { grid-template-columns: minmax(0, 1fr); } .rv-form input { width: 100%; } .rv-form label { flex: 1 1 160px; } }
+@media (max-width: 720px) { .hist-year { grid-template-columns: minmax(0, 1fr); gap: 6px; } .hist-year-h { padding-top: 0; } .hist-item { grid-template-columns: minmax(0, 1fr); gap: 6px; } .hist-date { flex-direction: row; flex-wrap: wrap; align-items: center; } .rv-cols { grid-template-columns: minmax(0, 1fr); } .rv-form input { width: 100%; } .rv-form label { flex: 1 1 160px; } }
 .law-refresh { min-height: 36px; padding: 4px 12px; font-size: 14px; }
 .law-refresh-msg { margin: 0; font-size: 13px; line-height: 1.5; color: #686a6d; }
 .law-status { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 8px; background: var(--surface); color: var(--text); font-size: 15px; line-height: 1.5; }
@@ -979,19 +999,36 @@ button{cursor:pointer}
 </sc-if>
 <sc-if value="{{histV.hasHistory}}" hint-placeholder-val="{{ true }}">
 <p class="hist-meta">{{histV.meta}}</p>
+<div class="hist-years">
+<sc-for list="{{histV.years}}" as="hy" hint-placeholder-count="2">
+<section class="hist-year" aria-label="{{hy.year}}년 개정">
+<h3 class="hist-year-h">{{hy.year}}</h3>
 <ol class="hist-list">
-<sc-for list="{{histV.rows}}" as="hr" hint-placeholder-count="2">
-<li class="hist-item">
-<div class="hist-date"><strong>{{hr.effLabel}}</strong><span>시행</span><sc-if value="{{hr.future}}" hint-placeholder-val="{{ false }}"><span class="hist-badge">시행 예정</span></sc-if></div>
-<div class="hist-body">
-<p class="hist-title">{{hr.no}}. {{hr.title}}</p>
-<p class="hist-sub">{{hr.sub}}</p>
-<p class="hist-reason">{{hr.reason}}</p>
-<div class="hist-foot"><span class="hist-imp">중요도 {{hr.stars}}</span><a class="hist-link" href="{{hr.url}}" target="_blank" rel="noopener noreferrer">국가법령정보센터 원문 ↗</a></div>
+<sc-for list="{{hy.items}}" as="hr" hint-placeholder-count="2">
+<li class="hist-card">
+<div class="hist-tags">
+<sc-for list="{{hr.areaTags}}" as="tg" hint-placeholder-count="2"><span class="{{tg.cls}}">{{tg.name}}</span></sc-for>
+<sc-if value="{{hr.future}}" hint-placeholder-val="{{ false }}"><span class="hist-badge">시행 예정</span></sc-if>
 </div>
+<p class="hist-title">{{hr.title}}</p>
+<sc-if value="{{hr.hasLines}}" hint-placeholder-val="{{ true }}">
+<ul class="hist-changes">
+<sc-for list="{{hr.lines}}" as="ln" hint-placeholder-count="2">
+<li class="{{ln.cls}}"><sc-if value="{{ln.item}}" hint-placeholder-val="{{ true }}"><span class="hist-ch-item">{{ln.item}}</span></sc-if><sc-if value="{{ln.hasBefore}}" hint-placeholder-val="{{ true }}"><span class="hist-ch-before">{{ln.before}}</span><span class="hist-ch-arrow" aria-label="에서">→</span></sc-if><span class="hist-ch-after">{{ln.after}}</span><sc-if value="{{ln.when}}" hint-placeholder-val="{{ false }}"><span class="hist-ch-when">{{ln.when}}</span></sc-if></li>
+</sc-for>
+</ul>
+</sc-if>
+<div class="hist-foot"><span>{{hr.dateLabel}} 시행</span><sc-if value="{{hr.law}}" hint-placeholder-val="{{ true }}"><span>{{hr.law}}</span></sc-if><sc-if value="{{hr.articles}}" hint-placeholder-val="{{ true }}"><span>{{hr.articles}}</span></sc-if>
+<sc-for list="{{hr.links}}" as="lk" hint-placeholder-count="1"><a class="hist-link" href="{{lk.url}}" target="_blank" rel="noopener noreferrer">{{lk.label}}</a></sc-for></div>
 </li>
 </sc-for>
 </ol>
+</section>
+</sc-for>
+</div>
+<sc-if value="{{histV.oldFormat}}" hint-placeholder-val="{{ false }}">
+<p class="hist-meta">이 확정본은 새 형식(분야·전→후) 이전에 저장돼 선정 사유로 대신 보여줘요. 「주요 개정 검토」에서 다시 추천받아 확정하면 새 형식으로 바뀌어요.</p>
+</sc-if>
 </sc-if>
 <sc-if value="{{histV.isEmpty}}" hint-placeholder-val="{{ false }}">
 <p class="hist-empty">아직 확정된 주요 개정 연혁이 없어요. 팀원이 「주요 개정 검토」에서 AI 추천을 확인하고 「연혁 확정」을 누르면 여기와 HWPX에 같은 내용이 들어가요.</p>
@@ -1021,6 +1058,14 @@ button{cursor:pointer}
 <div class="{{rc.cls}}">
 <label class="rv-check" for="{{rc.inputId}}"><input id="{{rc.inputId}}" type="checkbox" checked="{{rc.checked}}" onChange="{{rc.toggle}}"><span>{{rc.effLabel}} 시행 · {{rc.title}}</span></label>
 <div class="hist-foot"><sc-if value="{{rc.future}}" hint-placeholder-val="{{ false }}"><span class="hist-badge">시행 예정</span></sc-if><span class="hist-imp">중요도 {{rc.stars}}</span><span class="hist-sub">{{rc.sub}}</span></div>
+<sc-if value="{{rc.hasNew}}" hint-placeholder-val="{{ true }}">
+<div class="hist-tags"><sc-for list="{{rc.areaTags}}" as="tg" hint-placeholder-count="1"><span class="{{tg.cls}}">{{tg.name}}</span></sc-for></div>
+<ul class="hist-changes">
+<sc-for list="{{rc.lines}}" as="ln" hint-placeholder-count="1">
+<li class="{{ln.cls}}"><sc-if value="{{ln.item}}" hint-placeholder-val="{{ true }}"><span class="hist-ch-item">{{ln.item}}</span></sc-if><sc-if value="{{ln.hasBefore}}" hint-placeholder-val="{{ true }}"><span class="hist-ch-before">{{ln.before}}</span><span class="hist-ch-arrow" aria-label="에서">→</span></sc-if><span class="hist-ch-after">{{ln.after}}</span></li>
+</sc-for>
+</ul>
+</sc-if>
 <p class="hist-reason">선정 사유: {{rc.reason}}</p>
 <div class="hist-foot"><button type="button" class="handoff-button rv-ev-toggle" aria-expanded="{{rc.evOpenStr}}" onClick="{{rc.toggleEv}}">{{rc.evLabel}}</button><a class="hist-link" href="{{rc.url}}" target="_blank" rel="noopener noreferrer">개정 후 원문 ↗</a><a class="hist-link" href="{{rc.prevUrl}}" target="_blank" rel="noopener noreferrer">개정 전 원문 ↗</a></div>
 <sc-if value="{{rc.evOpen}}" hint-placeholder-val="{{ false }}">
@@ -1401,18 +1446,35 @@ function histTime(iso) {
   return lawDate(k.slice(0, 10)) + ' ' + k.slice(11, 16);
 }
 function kstToday() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
-/* 화면과 HWPX가 함께 쓰는 한 줄 정리. 시행 예정 여부는 오늘(한국 시간) 기준 */
+/* 화면과 HWPX가 함께 쓰는 한 줄 정리. 시행 예정 여부는 오늘(한국 시간) 기준
+   분야(areas)·짧은 제목(headline)·전→후(changes)가 없는 예전 확정본은 조문 요약·선정 사유로 대신 보여줌 */
+function shortDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  return m ? (+m[2]) + '. ' + (+m[3]) + '.' : '-';
+}
 function histRows(history, today) {
   const t = today || kstToday();
   return ((history && history.items) || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map((it, i) => {
     const future = String(it.effective_date || '') > t;
     const imp = Math.max(1, Math.min(5, Number(it.importance) || 0));
+    const areas = (Array.isArray(it.areas) ? it.areas : []).filter(Boolean);
+    const changes = (Array.isArray(it.changes) ? it.changes : []).filter((c) => c && c.after);
     return {
       no: i + 1,
       key: it.candidate_key,
+      effDate: it.effective_date || '',
+      year: String(it.effective_date || '').slice(0, 4) || '-',
       effLabel: lawDate(it.effective_date),
       future: future,
-      title: it.changed_summary || '',
+      title: it.headline || it.changed_summary || '',
+      articles: it.changed_summary || '',
+      hasNew: !!(it.headline || changes.length),
+      areas: areas.length ? areas : (it.headline ? ['기타'] : []),
+      changes: changes,
+      promNo: it.promulgation_no || '',
+      law: it.promulgation_no ? '법률 제' + it.promulgation_no + '호' : '',
+      promLabel: it.promulgation_date ? lawDate(it.promulgation_date) + ' 공포' : '',
+      revType: it.revision_type || '',
       sub: [it.revision_type, it.promulgation_no ? '법률 제' + it.promulgation_no + '호' : '', it.promulgation_date ? lawDate(it.promulgation_date) + ' 공포' : ''].filter(Boolean).join(' · '),
       reason: it.reason || '',
       importance: imp,
@@ -1421,6 +1483,55 @@ function histRows(history, today) {
       lawName: it.law_name || ''
     };
   });
+}
+/* 화면 B·HWPX C 공용 묶음: 같은 공포번호(같은 개정 법률)가 시행일만 나뉜 경우 한 항목으로 합침 */
+function histEntries(rows) {
+  const out = [];
+  rows.forEach((r) => {
+    const prev = r.promNo ? out.find((e) => e.promNo === r.promNo && e.lawName === r.lawName) : null;
+    if (!prev) {
+      out.push({ promNo: r.promNo, lawName: r.lawName, parts: [r] });
+    } else prev.parts.push(r);
+  });
+  return out.map((e, i) => {
+    const ps = e.parts, f = ps[0], multi = ps.length > 1;
+    const areas = [...new Set([].concat(...ps.map((p) => p.areas)))];
+    const titles = [...new Set(ps.map((p) => p.title).filter(Boolean))];
+    const lines = [];
+    ps.forEach((p) => {
+      const when = multi ? ' (' + p.effLabel + ' 시행)' : '';
+      if (p.changes.length) p.changes.forEach((c) => lines.push({ item: c.item || '', before: c.before || '', after: c.after, hasBefore: !!c.before, when: when }));
+      else if (p.reason) lines.push({ item: '', before: '', after: p.reason, hasBefore: false, when: when, note: true });
+    });
+    return {
+      no: i + 1,
+      year: f.year,
+      effDate: f.effDate,
+      dateLabel: multi ? f.effLabel + ' · ' + ps.slice(1).map((p) => shortDate(p.effDate)).join(' · ') : f.effLabel,
+      future: ps.some((p) => p.future),
+      areas: areas,
+      title: titles.join(' · '),
+      articles: [...new Set(ps.map((p) => p.articles).filter(Boolean))].join(' / '),
+      lines: lines,
+      reason: [...new Set(ps.map((p) => p.reason).filter(Boolean))].join(' '),
+      hasNew: ps.some((p) => p.hasNew),
+      law: f.law,
+      promLabel: f.promLabel,
+      revType: f.revType,
+      importance: Math.max(...ps.map((p) => p.importance)),
+      links: ps.map((p) => ({ label: multi ? p.effLabel + ' 시행 원문 ↗' : '국가법령정보센터 원문 ↗', url: p.url })).filter((l) => l.url),
+      lawName: e.lawName
+    };
+  });
+}
+function histYears(entries) {
+  const ys = [];
+  entries.forEach((e) => {
+    let y = ys.find((x) => x.year === e.year);
+    if (!y) { y = { year: e.year, items: [] }; ys.push(y); }
+    y.items.push(e);
+  });
+  return ys;
 }
 function xmlEsc(s) {
   return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
@@ -1463,30 +1574,75 @@ function hwpxZip(entries) {
   all.forEach((p) => { out.set(p, pos); pos += p.length; });
   return out;
 }
-/* 확정본(history) → HWPX 바이트. 글자 모양: 7 제목, 8 항목 제목(굵게), 1 본문, 9 작은 회색 */
+/* 확정본(history) → HWPX 바이트 (모양 C: 표 한 장)
+   글자 모양: 7 제목, 8 굵게(11pt), 1 본문, 9 작은 회색 / 테두리: 3 실선, 4 실선+회색 바탕(머리행) */
+const HWPX_BORDER_FILLS =
+  '<hh:borderFill id="3" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0"><hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/><hh:leftBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:rightBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:topBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:bottomBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/></hh:borderFill>' +
+  '<hh:borderFill id="4" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0"><hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/><hh:leftBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:rightBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:topBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:bottomBorder type="SOLID" width="0.12 mm" color="#000000"/><hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/><hc:fillBrush><hc:winBrush faceColor="#E7EBEE" hatchColor="#999999" alpha="0"/></hc:fillBrush></hh:borderFill>';
+function hwpxHeaderWithTable(header) {
+  return header.replace('<hh:borderFills itemCnt="2">', '<hh:borderFills itemCnt="4">').replace('</hh:borderFills>', HWPX_BORDER_FILLS + '</hh:borderFills>');
+}
+function histTableRows(entries) {
+  return entries.map((e) => ({
+    date: [e.dateLabel].concat(e.future ? ['[시행 예정]'] : []),
+    area: [e.areas.join(', ') || '-'],
+    what: [{ text: e.title || e.articles || '-', cp: 8 }].concat(e.lines.map((l) => ({ text: (l.note ? '' : '· ') + (l.item ? l.item + ': ' : '') + (l.hasBefore ? l.before + ' → ' : '') + l.after + l.when, cp: l.note ? 9 : 1 }))),
+    basis: [e.law, e.promLabel, e.revType, e.articles ? '(' + e.articles + ')' : ''].filter(Boolean)
+  }));
+}
 function buildHistoryHwpx(history, meta) {
   const today = (meta && meta.today) || kstToday();
   const rows = histRows(history, today);
+  const entries = histEntries(rows);
   const lawName = (rows[0] && rows[0].lawName) || (meta && meta.lawName) || '소관 법령';
   const title = lawName + ' 주요 개정 연혁';
   const used = new Set();
   const pid = () => { let v; do { v = Math.floor(Math.random() * 0x7FFFFFFF); } while (used.has(v) || v === 0); used.add(v); return v; };
-  const para = (text, cp) => '<hp:p id="' + pid() + '" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="' + cp + '">' +
+  const pXml = (text, cp) => '<hp:p id="' + pid() + '" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="' + cp + '">' +
     (text ? '<hp:t>' + xmlEsc(text) + '</hp:t>' : '<hp:t/>') + '</hp:run></hp:p>';
-  const lines = [];
-  lines.push(para('업무: ' + ((meta && meta.task) || '') + ' · 확정본 제' + history.version_no + '판 · ' + histTime(history.confirmed_at) + ' ' + (history.confirmed_by || '') + ' 확정 · 시행일순 ' + rows.length + '건', 9));
-  lines.push(para('작성 기준일: ' + lawDate(today) + ' (시행 예정 표시는 이 날짜 기준)', 9));
-  lines.push(para('', 1));
-  rows.forEach((r) => {
-    lines.push(para(r.no + '. ' + r.effLabel + ' 시행' + (r.future ? ' [시행 예정]' : '') + '  ' + r.title, 8));
-    lines.push(para('   개정: ' + r.sub, 1));
-    lines.push(para('   선정 사유: ' + r.reason, 1));
-    lines.push(para('   중요도: ' + r.stars + ' (' + r.importance + '/5)', 1));
-    lines.push(para('   출처: 국가법령정보센터 ' + r.url, 9));
-    lines.push(para('', 1));
+  /* 표: 시행일 | 분야 | 바뀐 내용 | 근거 (폭 합계 = 본문 폭 42520) */
+  const W = [7600, 6400, 18920, 9600];
+  const HEAD = ['시행일', '분야', '바뀐 내용', '근거'];
+  const cell = (paras, col, row, isHead) => {
+    if (!paras.length) paras = [{ text: '', cp: 1 }];
+    const lineCnt = Math.max(1, paras.length);
+    return '<hp:tc name="" header="' + (isHead ? 1 : 0) + '" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="' + (isHead ? 4 : 3) + '">' +
+      '<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="' + (isHead ? 'CENTER' : 'TOP') + '" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">' +
+      paras.map((q) => pXml(q.text, q.cp)).join('') + '</hp:subList>' +
+      '<hp:cellAddr colAddr="' + col + '" rowAddr="' + row + '"/><hp:cellSpan colSpan="1" rowSpan="1"/>' +
+      '<hp:cellSz width="' + W[col] + '" height="' + (282 + lineCnt * 1600) + '"/><hp:cellMargin left="510" right="510" top="141" bottom="141"/></hp:tc>';
+  };
+  const trs = [];
+  const heights = [];
+  trs.push('<hp:tr>' + HEAD.map((h, c) => cell([{ text: h, cp: 8 }], c, 0, true)).join('') + '</hp:tr>');
+  heights.push(282 + 1600);
+  histTableRows(entries).forEach((r, i) => {
+    const cols = [r.date.map((t) => ({ text: t, cp: 1 })), r.area.map((t) => ({ text: t, cp: 1 })), r.what, r.basis.map((t) => ({ text: t, cp: 9 }))];
+    const n = Math.max(...cols.map((c) => c.length));
+    heights.push(282 + n * 1600);
+    trs.push('<hp:tr>' + cols.map((c, ci) => {
+      const padded = c.concat(Array(n - c.length).fill(null)).filter(Boolean);
+      return cell(padded, ci, i + 1, false).replace(/height="\d+"\/><hp:cellMargin/, 'height="' + (282 + n * 1600) + '"/><hp:cellMargin');
+    }).join('') + '</hp:tr>');
   });
-  lines.push(para('※ 공포일·시행일·원문 링크는 법제처 국가법령정보센터(OpenAPI) 값이고, 선정 사유·중요도는 AI 추천을 팀원이 확인·확정한 내용입니다.', 9));
-  lines.push(para('※ 이 문서는 확정본 제' + history.version_no + '판(' + (history.id || '') + ')을 그대로 옮긴 것으로, 내려받을 때 AI를 다시 부르지 않았습니다.', 9));
+  const tblH = heights.reduce((a, b) => a + b, 0);
+  const tbl = '<hp:p id="' + pid() + '" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="1">' +
+    '<hp:tbl id="' + pid() + '" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="' + trs.length + '" colCnt="4" cellSpacing="0" borderFillIDRef="3" noAdjust="0">' +
+    '<hp:sz width="' + W.reduce((a, b) => a + b, 0) + '" widthRelTo="ABSOLUTE" height="' + tblH + '" heightRelTo="ABSOLUTE" protect="0"/>' +
+    '<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>' +
+    '<hp:outMargin left="0" right="0" top="0" bottom="0"/><hp:inMargin left="510" right="510" top="141" bottom="141"/>' +
+    trs.join('') + '</hp:tbl><hp:t/></hp:run></hp:p>';
+  const lines = [];
+  lines.push(pXml('업무: ' + ((meta && meta.task) || '') + ' · 확정본 제' + history.version_no + '판 · ' + histTime(history.confirmed_at) + ' ' + (history.confirmed_by || '') + ' 확정 · 시행일순 ' + entries.length + '건', 9));
+  lines.push(pXml('작성 기준일: ' + lawDate(today) + ' (시행 예정 표시는 이 날짜 기준)', 9));
+  lines.push(pXml('', 1));
+  lines.push(tbl);
+  lines.push(pXml('', 1));
+  lines.push(pXml('출처 (국가법령정보센터)', 8));
+  entries.forEach((e) => e.links.forEach((l) => lines.push(pXml(e.no + '. ' + (e.links.length > 1 ? l.label.replace(' ↗', '') : e.dateLabel + ' 시행') + ' — ' + l.url, 9))));
+  lines.push(pXml('', 1));
+  lines.push(pXml('※ 시행일·공포일·법률 번호·원문 링크는 법제처 국가법령정보센터(OpenAPI) 값이고, 분야·바뀐 내용은 AI가 개정 전후 조문에서 뽑은 것을 팀원이 확인·확정한 내용입니다.', 9));
+  lines.push(pXml('※ 같은 법률이 시행일을 나눠 시행된 경우 한 줄로 묶었습니다. 이 문서는 확정본 제' + history.version_no + '판(' + (history.id || '') + ')을 그대로 옮긴 것으로, 내려받을 때 AI를 다시 부르지 않았습니다.', 9));
   const section = HWPX_SKELETON.sectionPrefix + '<hp:run charPrIDRef="7"><hp:t>' + xmlEsc(title) + '</hp:t></hp:run></hp:p>' + lines.join('') + '</hs:sec>';
   const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
   const F = HWPX_SKELETON.files;
@@ -1496,12 +1652,12 @@ function buildHistoryHwpx(history, meta) {
     .replace(/(name="CreatedDate" content="text">)[^<]*/, '$1' + now)
     .replace(/(name="ModifiedDate" content="text">)[^<]*/, '$1' + now)
     .replace(/(name="date" content="text">)[^<]*/, '$1' + xmlEsc(lawDate(today)));
-  const preview = [title].concat(rows.map((r) => r.no + '. ' + r.effLabel + ' 시행' + (r.future ? ' [시행 예정]' : '') + ' ' + r.title)).join('\r\n');
+  const preview = [title].concat(entries.map((e) => e.no + '. ' + e.dateLabel + ' 시행' + (e.future ? ' [시행 예정]' : '') + ' ' + e.title)).join('\r\n');
   const png = Uint8Array.from(atob(HWPX_SKELETON.prvImageB64), (ch) => ch.charCodeAt(0));
   return hwpxZip([
     { name: 'mimetype', data: 'application/hwp+zip' },
     { name: 'version.xml', data: F['version.xml'] },
-    { name: 'Contents/header.xml', data: F['Contents/header.xml'] },
+    { name: 'Contents/header.xml', data: hwpxHeaderWithTable(F['Contents/header.xml']) },
     { name: 'Contents/section0.xml', data: section },
     { name: 'Preview/PrvText.txt', data: preview },
     { name: 'settings.xml', data: F['settings.xml'] },
@@ -2701,10 +2857,10 @@ class Component extends DCLogic {
     if (!h || !h.items || !h.items.length) return;
     try {
       const bytes = buildHistoryHwpx(h, { today: kstToday(), task: this.state.task });
-      const rows = histRows(h);
+      const rows = histEntries(histRows(h));
       const name = ((rows[0] && rows[0].lawName) || '법령') + '_주요개정연혁_제' + h.version_no + '판_' + kstToday().replace(/-/g, '') + '.hwpx';
       downloadBytes(bytes, name, 'application/hwp+zip');
-      this.setState({ histMsg: '「' + name + '」을 만들었어요. 화면의 확정본 제' + h.version_no + '판과 같은 ' + rows.length + '건이 들어 있어요.' });
+      this.setState({ histMsg: '「' + name + '」을 만들었어요. 화면의 확정본 제' + h.version_no + '판과 같은 ' + rows.length + '건이 표 한 장으로 들어 있어요.' });
     } catch (err) {
       this.setState({ histMsg: 'HWPX를 만들지 못했어요. 이 화면에서 다운로드가 막혀 있으면 브라우저에서 HTML을 직접 열어 주세요.' });
     }
@@ -2866,6 +3022,13 @@ class Component extends DCLogic {
         const h = st.data;
         const today = kstToday();
         const rows = histRows(h, today);
+        const AREA_CLS = { '지원 대상': 'is-target', '지급액': 'is-amount', '신청·지급 절차': 'is-process', '경과조치': 'is-transition' };
+        const tagsOf = (areas) => areas.map((a) => ({ name: a, cls: 'hist-tag ' + (AREA_CLS[a] || 'is-etc') }));
+        const linesOf = (lines) => lines.map((l) => Object.assign({}, l, { cls: 'hist-ch' + (l.note ? ' is-note' : '') }));
+        const years = histYears(histEntries(rows)).map((y) => ({
+          year: y.year,
+          items: y.items.map((e) => Object.assign({}, e, { articles: e.articles === e.title ? '' : e.articles, areaTags: tagsOf(e.areas), lines: linesOf(e.lines), hasLines: e.lines.length > 0 }))
+        }));
         const rv = s.rv;
         const busy = rv.status === 'reviewing' || rv.status === 'confirming';
         const recsRaw = (rv.data && rv.data.recommendations) || [];
@@ -2875,7 +3038,9 @@ class Component extends DCLogic {
           const evOpen = !!rv.ev[r.candidate_id];
           const ev = r.evidence || { articles: [], addenda: [] };
           const row = histRows({ items: [Object.assign({ sort_order: i + 1 }, r)] }, today)[0];
+          const ent = histEntries([row])[0];
           return Object.assign({}, row, {
+            title: row.title, hasNew: row.hasNew, areaTags: tagsOf(row.areas), lines: linesOf(ent.lines.filter((l) => !l.note)),
             cls: 'rv-item' + (on ? '' : ' is-off'), inputId: 'rvPick' + i, checked: on,
             prevUrl: r.previous_source_url || r.source_url,
             toggle: () => { const sel = Object.assign({}, this.state.rv.sel); sel[r.candidate_id] = !sel[r.candidate_id]; this.setState({ rv: Object.assign({}, this.state.rv, { sel: sel }) }); },
@@ -2893,8 +3058,10 @@ class Component extends DCLogic {
           retry: () => this.loadHistory(true),
           hasHistory: !!(h && rows.length), isEmpty: st.status === 'ok' && !(h && rows.length),
           noHistory: !(h && rows.length),
-          meta: h ? '확정본 제' + h.version_no + '판 · ' + histTime(h.confirmed_at) + ' ' + (h.confirmed_by || '') + ' 확정 · AI 추천(' + (h.model || '-') + ') 후 팀원 확인 · 시행일순 ' + rows.length + '건' : '',
+          meta: h ? '확정본 제' + h.version_no + '판 · ' + histTime(h.confirmed_at) + ' ' + (h.confirmed_by || '') + ' 확정 · AI 추천(' + (h.model || '-') + ') 후 팀원 확인 · 시행일순 ' + histEntries(rows).length + '건' : '',
           rows: rows,
+          years: years,
+          oldFormat: !!(h && rows.length) && rows.some((r) => !r.hasNew),
           msg: s.histMsg,
           download: () => this.downloadHistoryHwpx(),
           reviewOpen: rv.open, reviewOpenStr: rv.open ? 'true' : 'false',

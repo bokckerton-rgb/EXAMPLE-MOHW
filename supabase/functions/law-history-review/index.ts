@@ -6,6 +6,7 @@
 //   sync    : 개정 후보만 다시 수집(law-history-sync 재사용)  — 팀 코드 필요
 //   review  : 후보 수집 → OpenRouter 추천 → 검증 → 검토 기록   — 팀 코드 필요 (AI는 여기서만 호출)
 //   confirm : 팀원이 고른 추천 항목으로 새 확정 연혁 저장      — 팀 코드 필요
+// AI 답에는 중요도·선정 사유와 함께 분야(areas)·짧은 제목(headline)·전→후(changes)를 받습니다(화면 B·HWPX 표).
 //
 // Secrets(Edge Functions > Secrets):
 //   OPENROUTER_API_KEY  OpenRouter 키 (HTML·GitHub 에 넣지 않음)
@@ -145,6 +146,20 @@ function factsOf(c: Candidate) {
 }
 
 // ---------------- OpenRouter ----------------
+/** Secrets 에 붙여 넣을 때 섞이기 쉬운 따옴표·'Bearer '·공백/줄바꿈을 지움 */
+function cleanKey(raw: string): string {
+  return raw.trim().replace(/^["'`]+|["'`]+$/g, '').trim().replace(/^Bearer\s+/i, '').replace(/\s+/g, '');
+}
+/** 키를 드러내지 않는 점검 결과 (글자 수·시작 모양·고친 것) */
+function keyHint(raw: string, key: string): string {
+  const fixed: string[] = [];
+  if (/^\s*["'`]|["'`]\s*$/.test(raw)) fixed.push('따옴표');
+  if (/^\s*["'`]?\s*Bearer\s/i.test(raw)) fixed.push("'Bearer '");
+  if (/\S\s+\S/.test(raw.trim().replace(/^["'`]+|["'`]+$/g, '').replace(/^Bearer\s+/i, ''))) fixed.push('중간 공백·줄바꿈');
+  return `키 점검: ${key.length}자(보통 73자), ${key.startsWith('sk-or-v1-') ? 'sk-or-v1- 로 시작함' : 'sk-or-v1- 로 시작하지 않음'}` +
+    (fixed.length ? `, 자동으로 지운 것: ${fixed.join('·')}` : '');
+}
+
 const SYSTEM_PROMPT = [
   '당신은 보건복지부 규제개혁법무담당관의 업무 인수인계를 돕는 법령 개정 분석가입니다.',
   '입력은 법제처 시행일 기준 버전을 비교해 얻은 개정 후보 목록입니다. 각 후보에는 바뀐 조문의 개정 전·후 문구와 관련 부칙이 있습니다.',
@@ -156,7 +171,11 @@ const SYSTEM_PROMPT = [
   '- 최대 10건. 중요한 개정이 적으면 적게 고르세요(억지로 채우지 마세요).',
   '- importance 는 5(매우 큼)~1(작음) 정수입니다.',
   '- reason 은 근거 조문을 들어 한국어 한 문장(80자 이내)으로 쓰세요. 입력에 없는 사실·숫자·날짜를 만들지 마세요.',
-  '출력은 JSON 하나만: {"recommendations":[{"candidate_id":"…","importance":5,"reason":"…"}]}',
+  '- areas 는 다음 중 해당하는 것만 골라 배열로: "지원 대상", "지급액", "신청·지급 절차", "경과조치", "기타".',
+  '- headline 은 무엇이 바뀌었는지 한국어 20자 이내 짧은 제목(예: "13세 미만으로 확대", "첫만남이용권 신설").',
+  '- changes 는 핵심 변화 최대 3개. 각 항목 {"item": 무엇(예: 지원 대상), "before": 개정 전 값, "after": 개정 후 값}.',
+  '  before·after 는 입력의 개정전·개정후 문구나 관련부칙에 실제로 있는 표현만 짧게(30자 이내) 옮기세요. 새로 생긴 것이면 before 는 "".',
+  '출력은 JSON 하나만: {"recommendations":[{"candidate_id":"…","importance":5,"reason":"…","areas":["지원 대상"],"headline":"…","changes":[{"item":"지원 대상","before":"8세 미만","after":"13세 미만"}]}]}',
 ].join('\n');
 
 function aiInput(cands: Candidate[]) {
@@ -175,7 +194,8 @@ function aiInput(cands: Candidate[]) {
 }
 
 async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: string }> {
-  const key = env('OPENROUTER_API_KEY').trim();
+  const rawKey = env('OPENROUTER_API_KEY');
+  const key = cleanKey(rawKey);
   if (!key) throw new UserError(500, 'NO_OPENROUTER_KEY', '서버에 OpenRouter 키(OPENROUTER_API_KEY)가 없어요. Edge Functions > Secrets 에 등록해 주세요.');
   const model = env('OPENROUTER_MODEL').trim() || 'openrouter/auto';
   const scrub = (s: string) => s.split(key).join('***');
@@ -186,7 +206,7 @@ async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: 
       signal: AbortSignal.timeout(90000),
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'MOHW handoff law history' },
       body: JSON.stringify({
-        model, temperature: 0, max_tokens: 2500,
+        model, temperature: 0, max_tokens: 4000,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
@@ -202,7 +222,7 @@ async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: 
   if (!res.ok) {
     let msg = '';
     try { msg = JSON.parse(body)?.error?.message ?? ''; } catch { /* 무시 */ }
-    const why = res.status === 401 ? 'OpenRouter 키가 올바르지 않아요.'
+    const why = res.status === 401 ? `OpenRouter 키가 올바르지 않아요. ${keyHint(rawKey, key)}.`
       : res.status === 402 ? 'OpenRouter 크레딧이 부족해요.'
       : res.status === 429 ? 'OpenRouter 호출 한도에 걸렸어요. 잠시 뒤 다시 시도해 주세요.'
       : `OpenRouter 오류(HTTP ${res.status}).`;
@@ -213,6 +233,19 @@ async function askOpenRouter(cands: Candidate[]): Promise<{ model: string; raw: 
   return { model: String(data?.model || model), raw: String(data?.choices?.[0]?.message?.content ?? '') };
 }
 
+/** 화면 B·HWPX C 용 칸 정리: 분야는 정해진 다섯 가지만, 제목·전후 문구는 길이 제한 */
+const AREAS = ['지원 대상', '지급액', '신청·지급 절차', '경과조치', '기타'];
+const oneLine = (v: unknown, n: number) => cut(String(v ?? '').replace(/\s+/g, ' ').trim(), n);
+export function displayFields(r: any) {
+  const rawAreas: string[] = Array.isArray(r?.areas) ? r.areas.map(String) : String(r?.areas ?? '').split(/[,·\/]/);
+  const norm = (a: string) => a.replace(/\s+/g, '').replace('신청및지급절차', '신청·지급절차').replace('신청·지급절차', '신청·지급 절차').replace('지원대상', '지원 대상');
+  const areas = [...new Set(rawAreas.map((a) => norm(a.trim())).map((a) => AREAS.find((x) => x.replace(/\s+/g, '') === a.replace(/\s+/g, '')) ?? '').filter(Boolean))];
+  const changes = (Array.isArray(r?.changes) ? r.changes : []).slice(0, 3)
+    .map((c: any) => ({ item: oneLine(c?.item, 20), before: oneLine(c?.before, 60), after: oneLine(c?.after, 60) }))
+    .filter((c: any) => c.after);
+  return { areas: areas.length ? areas : ['기타'], headline: oneLine(r?.headline, 40), changes };
+}
+
 /** AI 답 검증: 실제 후보에 없는 ID·중복 ID·형식 오류를 거르고 최대 10건 */
 export function validateRecommendations(raw: string, allowedIds: Set<string>) {
   let parsed: any = null;
@@ -221,7 +254,7 @@ export function validateRecommendations(raw: string, allowedIds: Set<string>) {
   if (!parsed || !Array.isArray(parsed.recommendations)) {
     throw new UserError(502, 'AI_BAD_FORMAT', 'AI 답이 약속한 JSON 형식이 아니에요. 다시 검토해 주세요.');
   }
-  const kept: { candidate_id: string; importance: number; reason: string }[] = [];
+  const kept: { candidate_id: string; importance: number; reason: string; areas: string[]; headline: string; changes: { item: string; before: string; after: string }[] }[] = [];
   const dropped: { candidate_id: string; why: string }[] = [];
   const seen = new Set<string>();
   for (const r of parsed.recommendations) {
@@ -232,7 +265,7 @@ export function validateRecommendations(raw: string, allowedIds: Set<string>) {
     if (!reason) { dropped.push({ candidate_id: id, why: '선정 사유 없음' }); continue; }
     seen.add(id);
     const imp = Math.round(Number(r?.importance));
-    kept.push({ candidate_id: id, importance: Number.isFinite(imp) ? Math.min(5, Math.max(1, imp)) : 3, reason: cut(reason, 150) });
+    kept.push({ candidate_id: id, importance: Number.isFinite(imp) ? Math.min(5, Math.max(1, imp)) : 3, reason: cut(reason, 150), ...displayFields(r) });
   }
   kept.sort((a, b) => b.importance - a.importance);
   for (const x of kept.splice(MAX_ITEMS)) dropped.push({ candidate_id: x.candidate_id, why: '10건 초과' });
@@ -244,7 +277,7 @@ async function currentHistory(taskId: string) {
   const confs = await rest(`law_history_confirmations?select=id,version_no,confirmed_at,confirmed_by,model,item_count&task_id=eq.${encodeURIComponent(taskId)}&is_current=eq.true&limit=1`);
   if (!confs.length) return null;
   const c = confs[0];
-  const items = await rest(`law_history_items?select=sort_order,candidate_id,candidate_key,law_id,law_name,effective_date,promulgation_date,promulgation_no,revision_type,changed_summary,importance,reason,source_url,previous_source_url&confirmation_id=eq.${c.id}&order=sort_order.asc`);
+  const items = await rest(`law_history_items?select=sort_order,candidate_id,candidate_key,law_id,law_name,effective_date,promulgation_date,promulgation_no,revision_type,changed_summary,importance,reason,source_url,previous_source_url,areas,headline,changes&confirmation_id=eq.${c.id}&order=sort_order.asc`);
   return { ...c, items: items.map((i: any) => ({ ...i, is_future: isFutureNow(i) })) };
 }
 
@@ -310,7 +343,7 @@ export async function handle(req: Request): Promise<Response> {
         });
         const byId = new Map(cands.map((c) => [c.id, c]));
         const recommendations = kept
-          .map((k) => ({ ...factsOf(byId.get(k.candidate_id)!), importance: k.importance, reason: k.reason, evidence: evidence(byId.get(k.candidate_id)!) }))
+          .map((k) => ({ ...factsOf(byId.get(k.candidate_id)!), importance: k.importance, reason: k.reason, areas: k.areas, headline: k.headline, changes: k.changes, evidence: evidence(byId.get(k.candidate_id)!) }))
           .sort((a, b) => String(a.effective_date).localeCompare(String(b.effective_date)));
         return json(200, { ok: true, task_id: taskId, review_id: saved[0].id, model, sync, considered: cands.length, recommendations, dropped });
       } catch (e) {
@@ -345,6 +378,7 @@ export async function handle(req: Request): Promise<Response> {
         effective_date: c.to_ef_yd, promulgation_date: c.promulgation_date, promulgation_no: c.promulgation_no,
         revision_type: c.revision_type, changed_summary: changedSummary(c),
         importance: recMap.get(c.id).importance, reason: recMap.get(c.id).reason,
+        ...displayFields(recMap.get(c.id)),
         source_url: c.source_url, previous_source_url: c.previous_source_url,
       }));
       await rest('rpc/confirm_law_history', {
